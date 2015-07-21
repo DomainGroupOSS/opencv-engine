@@ -1,10 +1,13 @@
 import cv2
 
-from colour import Color
-
 from thumbor.engines import BaseEngine
 from pexif import JpegFile, ExifSegment
 import numpy as np
+
+F_WEBP = 'WEBP'
+F_PNG = 'PNG'
+F_GIF = 'GIF'
+F_JPEG = 'JPEG'
 
 try:
     from thumbor.ext.filters import _composite
@@ -13,66 +16,56 @@ except ImportError:
     FILTERS_AVAILABLE = False
 
 FORMATS = {
-    '.jpg': 'JPEG',
-    '.jpeg': 'JPEG',
-    '.gif': 'GIF',
-    '.png': 'PNG',
-    '.webp': 'WEBP'
+    '.jpg': F_JPEG,
+    '.jpeg': F_JPEG,
+    '.gif': F_GIF,
+    '.png': F_PNG,
+    '.webp': F_WEBP
 }
 
 __author__ = 'konstantin.burov'
 
 class Engine(BaseEngine):
     def read(self, extension, quality):
-        if quality is None:
-            quality = self.context.config.QUALITY
-
         options = None
-        extension = extension or self.extension
-        try:
-            if FORMATS[extension] == 'JPEG':
-                options = [cv2.IMWRITE_JPEG_QUALITY, quality]
-        except KeyError:
-            # default is JPEG so
-            options = [cv2.IMWRITE_JPEG_QUALITY, quality]
-
-        try:
-            if FORMATS[extension] == 'WEBP':
-                options = [cv2.IMWRITE_WEBP_QUALITY, quality]
-        except KeyError:
-            # default is JPEG so
-            options = [cv2.IMWRITE_WEBP_QUALITY, quality]
-
+        image_format = self._get_format(extension)
+        if image_format is F_JPEG or image_format is F_WEBP:
+            if quality is None:
+                quality = self.context.config.QUALITY
+            quality_option = cv2.IMWRITE_JPEG_QUALITY if image_format is F_JPEG else cv2.IMWRITE_WEBP_QUALITY
+            options = [quality_option, quality]
         data = cv2.imencode(extension, self.image, options or [])[1].tostring()
 
-        if FORMATS[extension] == 'JPEG' and self.context.config.PRESERVE_EXIF_INFO:
+        if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO:
             if hasattr(self, 'exif'):
                 img = JpegFile.fromString(data)
                 img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
                 data = img.writeString()
         return data
 
+    def _get_format(self, extension=None):
+        e = extension or self.extension
+        image_format = FORMATS.get(e)
+        return image_format
+
     def crop(self, crop_left, crop_top, crop_right, crop_bottom):
         self.image = self.image[crop_top:crop_bottom, crop_left:crop_right]
-
-    def image_data_as_rgb(self, update_image=True):
-        pass
 
     def create_image(self, buffer):
         # FIXME: opencv doesn't support gifs, even worse, the library
         # segfaults when trying to decoding a gif. An exception is a
         # less drastic measure.
-        try:
-            if FORMATS[self.extension] == 'GIF':
-                raise ValueError("opencv doesn't support gifs")
-        except KeyError:
-            pass
+        image_format = self._get_format()
+        if image_format is F_GIF:
+            raise ValueError("opencv doesn't support gifs")
 
+        # TODO: figure out what this was doing.
         # imagefiledata = cv.CreateMatHeader(1, len(buffer), cv.CV_8UC1)
         # cv.SetData(imagefiledata, buffer, len(buffer))
         img0 = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
 
-        if FORMATS[self.extension] == 'JPEG':
+        if image_format is F_JPEG:
+            # TODO: does webp support exif? Maybe preserve the data.
             try:
                 info = JpegFile.fromString(buffer).get_exif()
                 if info:
@@ -82,24 +75,6 @@ class Engine(BaseEngine):
                 pass
 
         return img0
-
-    def paste(self):
-        pass
-
-    def gen_image(self):
-        pass
-
-    def flip_vertically(self):
-        pass
-
-    def flip_horizontally(self):
-        pass
-
-    def set_image_data(self, data):
-        pass
-
-    def enable_alpha(self):
-        pass
 
     def resize(self, width, height):
         size = (int(round(width, 0)), int(round(height, 0)))
