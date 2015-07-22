@@ -44,11 +44,10 @@ class Engine(BaseEngine):
             options = [quality_option, quality]
         data = cv2.imencode(extension, self.image, options or [])[1].tostring()
 
-        if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO:
-            if hasattr(self, 'exif'):
-                img = JpegFile.fromString(data)
-                img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
-                data = img.writeString()
+        if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO and hasattr(self, 'exif'):
+            img = JpegFile.fromString(data)
+            img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
+            data = img.writeString()
         return data
 
     def _get_format(self, extension=None):
@@ -70,8 +69,7 @@ class Engine(BaseEngine):
             # cv.SetData(imagefiledata, buffer, len(buffer))
             img = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
 
-        if image_format is F_JPEG:
-            # TODO: does webp support exif? Maybe preserve the data.
+        if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO:
             try:
                 info = JpegFile.fromString(buffer).get_exif()
                 if info:
@@ -79,13 +77,13 @@ class Engine(BaseEngine):
                     self.exif_marker = info.marker
             except Exception:
                 pass
-
         return img
 
     def resize(self, width, height):
         size = (int(round(width, 0)), int(round(height, 0)))
         current_width, current_height = self.size
-        if width < current_width and height < current_height:
+        downscale = width < current_width and height < current_height
+        if downscale:
             # When down sampling use INTER_AREA as per
             # http://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_geometric_transformations/py_geometric_transformations.html
             interpolation_method = cv2.INTER_AREA
@@ -95,11 +93,6 @@ class Engine(BaseEngine):
 
     @property
     def size(self):
-        if len(self.image.shape) > 2:
-            height, width, channels = self.image.shape
-        else:
-            height, width = self.image.shape
+        width = self.image.shape[1]
+        height = self.image.shape[0]
         return width, height
-
-    def normalize(self):
-        pass
