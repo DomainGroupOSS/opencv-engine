@@ -1,8 +1,11 @@
+from io import BytesIO
 import cv2
+from numpy.ma import asarray
 
 from thumbor.engines import BaseEngine
 from pexif import JpegFile, ExifSegment
 import numpy as np
+from PIL import Image
 
 F_WEBP = 'WEBP'
 F_PNG = 'PNG'
@@ -29,6 +32,11 @@ class Engine(BaseEngine):
     def read(self, extension, quality):
         options = None
         image_format = self._get_format(extension)
+        if image_format is F_GIF:
+            # OpenCV doesn't support GIF, fall back to PNG
+            image_format = F_PNG
+            extension = '.png'
+
         if image_format is F_JPEG or image_format is F_WEBP:
             if quality is None:
                 quality = self.context.config.QUALITY
@@ -52,17 +60,15 @@ class Engine(BaseEngine):
         self.image = self.image[crop_top:crop_bottom, crop_left:crop_right]
 
     def create_image(self, buffer):
-        # FIXME: opencv doesn't support gifs, even worse, the library
-        # segfaults when trying to decoding a gif. An exception is a
-        # less drastic measure.
         image_format = self._get_format()
         if image_format is F_GIF:
-            raise ValueError("opencv doesn't support gifs")
-
-        # TODO: figure out what this was doing.
-        # imagefiledata = cv.CreateMatHeader(1, len(buffer), cv.CV_8UC1)
-        # cv.SetData(imagefiledata, buffer, len(buffer))
-        img0 = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
+            # OpenCV doesn't support GIF, fallback to PIL when decoding GIFs.
+            img = asarray(Image.open(BytesIO(buffer)).convert('RGB'))
+        else:
+            # TODO: figure out what this was doing.
+            # imagefiledata = cv.CreateMatHeader(1, len(buffer), cv.CV_8UC1)
+            # cv.SetData(imagefiledata, buffer, len(buffer))
+            img = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
 
         if image_format is F_JPEG:
             # TODO: does webp support exif? Maybe preserve the data.
@@ -74,7 +80,7 @@ class Engine(BaseEngine):
             except Exception:
                 pass
 
-        return img0
+        return img
 
     def resize(self, width, height):
         size = (int(round(width, 0)), int(round(height, 0)))
@@ -89,7 +95,10 @@ class Engine(BaseEngine):
 
     @property
     def size(self):
-        height, width, channels = self.image.shape
+        if len(self.image.shape) > 2:
+            height, width, channels = self.image.shape
+        else:
+            height, width = self.image.shape
         return width, height
 
     def normalize(self):
