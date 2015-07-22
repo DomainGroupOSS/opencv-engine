@@ -78,7 +78,14 @@ class Engine(BaseEngine):
 
     def resize(self, width, height):
         size = (int(round(width, 0)), int(round(height, 0)))
-        self.image = cv2.resize(self.image, size, cv2.INTER_AREA)
+        current_width, current_height = self.size
+        if width < current_width and height < current_height:
+            # When down sampling use INTER_AREA as per
+            # http://docs.opencv.org/3.0-beta/doc/py_tutorials/py_imgproc/py_geometric_transformations/py_geometric_transformations.html
+            interpolation_method = cv2.INTER_AREA
+        else:
+            interpolation_method = cv2.INTER_LINEAR
+        self.image = cv2.resize(src=self.image, dsize=size, interpolation=interpolation_method)
 
     @property
     def size(self):
