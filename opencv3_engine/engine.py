@@ -62,7 +62,11 @@ class Engine(BaseEngine):
         image_format = self._get_format()
         if image_format is F_GIF:
             # OpenCV doesn't support GIF, fallback to PIL when decoding GIFs.
-            img = asarray(Image.open(BytesIO(buffer)).convert('RGB'))
+            image_open = Image.open(BytesIO(buffer)).convert('RGB')
+            img = np.array(image_open)
+            # http://stackoverflow.com/a/11590526/272824 OpenCV uses BGR.
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
         else:
             # TODO: figure out what this was doing.
             # imagefiledata = cv.CreateMatHeader(1, len(buffer), cv.CV_8UC1)
