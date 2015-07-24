@@ -1,6 +1,5 @@
 from io import BytesIO
 import cv2
-from numpy.ma import asarray
 
 from thumbor.engines import BaseEngine
 from pexif import JpegFile, ExifSegment
@@ -33,22 +32,26 @@ class Engine(BaseEngine):
         options = None
         image_format = self._get_format(extension)
         if image_format is F_GIF:
-            # OpenCV doesn't support GIF, fall back to PNG
-            image_format = F_PNG
-            extension = '.png'
+            # OpenCV doesn't have GIF encoder, fall back to PIL.
+            self.image = cv2.cvtColor(self.image, cv2.COLOR_RGB2BGR)
+            img = Image.fromarray(self.image)
+            b = BytesIO()
+            img.save(b, F_GIF)
+            data = b.getvalue()
+            return data
+        else:
+            if image_format is F_JPEG or image_format is F_WEBP:
+                if quality is None:
+                    quality = self.context.config.QUALITY
+                quality_option = cv2.IMWRITE_JPEG_QUALITY if image_format is F_JPEG else cv2.IMWRITE_WEBP_QUALITY
+                options = [quality_option, quality]
+            data = cv2.imencode(extension, self.image, options or [])[1].tostring()
 
-        if image_format is F_JPEG or image_format is F_WEBP:
-            if quality is None:
-                quality = self.context.config.QUALITY
-            quality_option = cv2.IMWRITE_JPEG_QUALITY if image_format is F_JPEG else cv2.IMWRITE_WEBP_QUALITY
-            options = [quality_option, quality]
-        data = cv2.imencode(extension, self.image, options or [])[1].tostring()
-
-        if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO and hasattr(self, 'exif'):
-            img = JpegFile.fromString(data)
-            img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
-            data = img.writeString()
-        return data
+            if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO and hasattr(self, 'exif'):
+                img = JpegFile.fromString(data)
+                img._segments.insert(0, ExifSegment(self.exif_marker, None, self.exif, 'rw'))
+                data = img.writeString()
+            return data
 
     def _get_format(self, extension=None):
         e = extension or self.extension
@@ -66,7 +69,6 @@ class Engine(BaseEngine):
             img = np.array(image_open)
             # http://stackoverflow.com/a/11590526/272824 OpenCV uses BGR.
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-
         else:
             # TODO: figure out what this was doing.
             # imagefiledata = cv.CreateMatHeader(1, len(buffer), cv.CV_8UC1)
