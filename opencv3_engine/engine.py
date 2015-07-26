@@ -1,10 +1,16 @@
 from io import BytesIO
+from tempfile import NamedTemporaryFile
+from get_image_size import get_image_size
 import cv2
 
 from thumbor.engines import BaseEngine
 from pexif import JpegFile, ExifSegment
 import numpy as np
 from PIL import Image
+
+C_ENGINE_TMP_DIR = 'OPENCV3_ENGINE_TMP_DIR'
+
+C_SCALE_ON_LOAD = 'OPENCV3_ENGINE_SCALE_ON_LOAD'
 
 F_WEBP = 'WEBP'
 F_PNG = 'PNG'
@@ -69,12 +75,23 @@ class Engine(BaseEngine):
             img = np.array(image_open)
             # http://stackoverflow.com/a/11590526/272824 OpenCV uses BGR.
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        else:
+        elif self.context.config.get(C_SCALE_ON_LOAD, False):
+            self._f = NamedTemporaryFile(bufsize=len(buffer), dir=self.context.config.get(C_ENGINE_TMP_DIR, None))
+            self._f.write(buffer)
+            # just read image width and height
+            width, height = get_image_size(self._f.name)
+            factor = 1
+            out_width = self.context.request.width
+            out_height = self.context.request.height
+            while width/factor > out_width*2 and height*2/factor > 2*out_height:
+                factor *= 2
+            img = cv2.imread_reduced(self._f.name, cv2.IMREAD_UNCHANGED, scale_denom=factor)
+            self._f.close()
             # TODO: figure out what this was doing.
             # imagefiledata = cv.CreateMatHeader(1, len(buffer), cv.CV_8UC1)
             # cv.SetData(imagefiledata, buffer, len(buffer))
+        else:
             img = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
-
         if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO:
             try:
                 info = JpegFile.fromString(buffer).get_exif()
