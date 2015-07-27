@@ -8,6 +8,8 @@ from pexif import JpegFile, ExifSegment
 import numpy as np
 from PIL import Image
 
+C_NO_WEBP_OUTPUT = 'OPENCV3_ENGINE_NO_WEBP_OUTPUT'
+
 C_ENGINE_TMP_DIR = 'OPENCV3_ENGINE_TMP_DIR'
 
 C_SCALE_ON_LOAD = 'OPENCV3_ENGINE_SCALE_ON_LOAD'
@@ -46,6 +48,10 @@ class Engine(BaseEngine):
             data = b.getvalue()
             return data
         else:
+            if self.context.config.get(C_NO_WEBP_OUTPUT, False):
+                # webp encoding is slow, output jpeg
+                image_format = F_JPEG
+                extension = '.jpeg'
             if image_format is F_JPEG or image_format is F_WEBP:
                 if quality is None:
                     quality = self.context.config.QUALITY
