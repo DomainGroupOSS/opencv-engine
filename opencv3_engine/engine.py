@@ -48,7 +48,7 @@ class Engine(BaseEngine):
             data = b.getvalue()
             return data
         else:
-            if self.context.config.get(C_NO_WEBP_OUTPUT, False):
+            if self.context.config.get(C_NO_WEBP_OUTPUT, False) and image_format is F_WEBP:
                 # webp encoding is slow, output jpeg
                 image_format = F_JPEG
                 extension = '.jpeg'
