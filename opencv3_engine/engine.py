@@ -12,10 +12,10 @@ C_ENGINE_TMP_DIR = 'OPENCV3_ENGINE_TMP_DIR'
 
 C_SCALE_ON_LOAD = 'OPENCV3_ENGINE_SCALE_ON_LOAD'
 
-F_WEBP = 'WEBP'
-F_PNG = 'PNG'
-F_GIF = 'GIF'
-F_JPEG = 'JPEG'
+F_WEBP = '.webp'
+F_PNG = '.png'
+F_GIF = '.gif'
+F_JPEG = '.jpg'
 
 try:
     from thumbor.ext.filters import _composite
@@ -46,12 +46,14 @@ class Engine(BaseEngine):
             data = b.getvalue()
             return data
         else:
+            if not image_format:
+                image_format = F_JPEG
             if image_format is F_JPEG or image_format is F_WEBP:
                 if quality is None:
                     quality = self.context.config.QUALITY
                 quality_option = cv2.IMWRITE_JPEG_QUALITY if image_format is F_JPEG else cv2.IMWRITE_WEBP_QUALITY
                 options = [quality_option, quality]
-            data = cv2.imencode(extension, self.image, options or [])[1].tostring()
+            data = cv2.imencode(image_format, self.image, options or [])[1].tostring()
 
             if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO and hasattr(self, 'exif'):
                 img = JpegFile.fromString(data)
@@ -61,6 +63,7 @@ class Engine(BaseEngine):
 
     def _get_format(self, extension=None):
         e = extension or self.extension
+        e = e.lower()
         image_format = FORMATS.get(e)
         return image_format
 
