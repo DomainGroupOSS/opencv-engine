@@ -4,7 +4,7 @@ __author__ = 'konstantin.burov'
 
 import logging
 
-__version__ = '3.0.2'
+__version__ = '3.0.3'
 
 try:
     from opencv3_engine.engine import Engine  # NOQA
