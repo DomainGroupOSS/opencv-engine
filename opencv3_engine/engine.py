@@ -1,4 +1,5 @@
 from io import BytesIO
+from PIL import ImageFile
 from tempfile import NamedTemporaryFile
 from get_image_size import get_image_size
 import cv2
@@ -74,10 +75,7 @@ class Engine(BaseEngine):
         image_format = self._get_format()
         if image_format is F_GIF:
             # OpenCV doesn't support GIF, fallback to PIL when decoding GIFs.
-            image_open = Image.open(BytesIO(buffer)).convert('RGB')
-            img = np.array(image_open)
-            # http://stackoverflow.com/a/11590526/272824 OpenCV uses BGR.
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            img = self.create_via_pil(buffer)
         elif self.context.config.get(C_SCALE_ON_LOAD, False):
             self._f = NamedTemporaryFile(bufsize=len(buffer), dir=self.context.config.get(C_ENGINE_TMP_DIR, None))
             self._f.write(buffer)
@@ -95,6 +93,9 @@ class Engine(BaseEngine):
             # cv.SetData(imagefiledata, buffer, len(buffer))
         else:
             img = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
+        if not img:
+            # OpenCV failed to decode the image. Try to fall back to PIL.
+            img = self.create_via_pil(buffer)
         if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO:
             try:
                 info = JpegFile.fromString(buffer).get_exif()
@@ -103,6 +104,17 @@ class Engine(BaseEngine):
                     self.exif_marker = info.marker
             except Exception:
                 pass
+        return img
+
+    @staticmethod
+    def create_via_pil(image_buffer):
+        # Allow to decode poorly encoded images:
+        # http://stackoverflow.com/a/23575424/272824
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        image_open = Image.open(BytesIO(image_buffer)).convert('RGB')
+        img = np.array(image_open)
+        # http://stackoverflow.com/a/11590526/272824 OpenCV uses BGR.
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         return img
 
     def resize(self, width, height):
