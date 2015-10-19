@@ -93,7 +93,7 @@ class Engine(BaseEngine):
             # cv.SetData(imagefiledata, buffer, len(buffer))
         else:
             img = cv2.imdecode(np.frombuffer(buffer, np.uint8), cv2.IMREAD_UNCHANGED)
-        if not img:
+        if img is None:
             # OpenCV failed to decode the image. Try to fall back to PIL.
             img = self.create_via_pil(buffer)
         if image_format is F_JPEG and self.context.config.PRESERVE_EXIF_INFO:
